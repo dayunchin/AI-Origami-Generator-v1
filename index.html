@@ -1,36 +1,476 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Origami Generator v1</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Palette Pro ✨</title>
     <script src="https://cdn.tailwindcss.com"></script>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.1.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
-    "react/": "https://aistudiocdn.com/react@^19.1.1/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.17.0"
-  }
-}
-</script>
-<style>
-      .checkerboard-bg {
-        background-color: #374151; /* bg-gray-700 */
-        background-image: 
-          linear-gradient(45deg, #4b5563 25%, transparent 25%), 
-          linear-gradient(-45deg, #4b5563 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, #4b5563 75%),
-          linear-gradient(-45deg, transparent 75%, #4b5563 75%);
-        background-size: 20px 20px;
-        background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-      }
-</style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+        }
+        .layers-panel::-webkit-scrollbar { width: 6px; }
+        .layers-panel::-webkit-scrollbar-track { background: #2d3748; }
+        .layers-panel::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 3px; }
+        .layers-panel::-webkit-scrollbar-thumb:hover { background: #718096; }
+        .tool-btn.active { background-color: #4299e1; color: white; }
+        .canvas-container {
+            position: relative;
+            background-image:
+                linear-gradient(45deg, #ccc 25%, transparent 25%),
+                linear-gradient(135deg, #ccc 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ccc 75%),
+                linear-gradient(135deg, transparent 75%, #ccc 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 0, 10px -10px, 0px 10px;
+        }
+        #mask-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+        .modal-overlay { transition: opacity 0.2s ease-in-out; }
+        .modal-content { transition: transform 0.2s ease-in-out; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 1s linear infinite;
+        }
+        .layer-loader {
+             border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            width: 16px; height: 16px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
-  <body class="bg-gray-800">
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
+<body class="bg-gray-800 text-white flex h-screen overflow-hidden">
+
+    <!-- Toolbar -->
+    <div class="w-16 bg-gray-900 flex flex-col items-center py-4 space-y-4 shadow-2xl z-20">
+        <h1 class="text-2xl font-bold text-blue-400">P</h1>
+        <div class="flex flex-col space-y-2">
+            <!-- Drawing Tools -->
+            <button id="tool-brush" class="tool-btn p-2 rounded-lg hover:bg-gray-700 active" title="Brush"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+            <button id="tool-eraser" class="tool-btn p-2 rounded-lg hover:bg-gray-700" title="Eraser"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21H7Z"/><path d="M22 21H7"/><path d="m5 12 5 5"/></svg></button>
+            <button id="tool-fill" class="tool-btn p-2 rounded-lg hover:bg-gray-700" title="Fill"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 21 14-14"/><path d="M6 12.5 11.5 7"/></svg></button>
+            <button id="tool-text" class="tool-btn p-2 rounded-lg hover:bg-gray-700" title="Text"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.1H7V4h10v2.1Z"/><path d="M12 19.9V6.1"/><path d="M10 4h4"/></svg></button>
+            <button id="tool-edit" class="tool-btn p-2 rounded-lg hover:bg-gray-700" title="Magic Edit (Inpainting)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8-5.8 1.9 5.8 1.9L12 18l1.9-5.8 5.8-1.9-5.8-1.9z"/></svg></button>
+             <div class="border-t border-gray-700 w-full my-2"></div>
+            <!-- Action Tools -->
+            <button id="action-flip" class="p-2 rounded-lg hover:bg-gray-700" title="Flip Layer"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 12 5-5v10l-5-5Z"/><path d="m21 12-5-5v10l5-5Z"/><path d="M12 2v20"/></svg></button>
+            <button id="action-rotate" class="p-2 rounded-lg hover:bg-gray-700" title="Rotate Layer"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
+            <button id="action-expand" class="p-2 rounded-lg hover:bg-gray-700" title="Expand Canvas"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 9.5 21 3m0 0h-6m6 0v6M9.5 14.5 3 21m0 0h6m-6 0v-6"/></svg></button>
+            <div class="border-t border-gray-700 w-full my-2"></div>
+            <!-- Undo/Redo Tools -->
+            <button id="action-undo" class="p-2 rounded-lg hover:bg-gray-700 disabled:text-gray-600 disabled:cursor-not-allowed" title="Undo" disabled><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 9H6.5a3.5 3.5 0 0 0 0 7h11"/><path d="m13 5-3 3 3 3"/></svg></button>
+            <button id="action-redo" class="p-2 rounded-lg hover:bg-gray-700 disabled:text-gray-600 disabled:cursor-not-allowed" title="Redo" disabled><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 9 3 3-3 3"/><path d="M17.5 16H4a3.5 3.5 0 0 1 0-7h11"/></svg></button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col">
+        <!-- Top Options Bar -->
+        <div class="bg-gray-700 h-16 flex items-center px-4 space-x-2 shadow-lg z-10">
+             <div id="font-options" class="hidden items-center space-x-4">
+                <div class="flex items-center space-x-2"><label for="font-family" class="text-sm font-medium">Font:</label><select id="font-family" class="bg-gray-800 border border-gray-600 rounded-md px-2 py-1 text-sm"><option>Arial</option><option>Verdana</option><option>Georgia</option><option>Times New Roman</option><option>Courier New</option></select></div>
+                <div class="flex items-center space-x-2"><label for="font-size" class="text-sm font-medium">Font Size:</label><input type="number" id="font-size" value="32" min="8" class="bg-gray-800 border border-gray-600 rounded-md px-2 py-1 w-16 text-sm"></div>
+            </div>
+            <div class="flex-grow"></div>
+            <!-- Gemini API Feature Buttons -->
+            <div class="flex items-center space-x-2">
+                 <button id="ai-texture-btn" class="bg-gradient-to-r from-lime-400 to-green-500 hover:from-lime-500 hover:to-green-600 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 shadow-lg transition-transform transform hover:scale-105 text-sm"><span>✨ AI Texture</span></button>
+                 <button id="ai-story-btn" class="bg-gradient-to-r from-sky-400 to-cyan-500 hover:from-sky-500 hover:to-cyan-600 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 shadow-lg transition-transform transform hover:scale-105 text-sm"><span>✨ AI Story</span></button>
+                 <button id="ai-sketch-btn" class="bg-gradient-to-r from-rose-400 to-red-500 hover:from-rose-500 hover:to-red-600 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 shadow-lg transition-transform transform hover:scale-105 text-sm"><span>✨ AI Sketch</span></button>
+                 <button id="ai-feedback-btn" class="bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 shadow-lg transition-transform transform hover:scale-105 text-sm"><span>✨ AI Feedback</span></button>
+                 <button id="ai-music-btn" class="bg-gradient-to-r from-green-400 to-cyan-500 hover:from-green-500 hover:to-cyan-600 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 shadow-lg transition-transform transform hover:scale-105 text-sm"><span>✨ AI Music</span></button>
+                 <button id="ai-style-btn" class="bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 shadow-lg transition-transform transform hover:scale-105 text-sm"><span>✨ AI Style</span></button>
+                 <button id="ai-image-btn" class="bg-gradient-to-r from-teal-400 to-blue-500 hover:from-teal-500 hover:to-blue-600 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 shadow-lg transition-transform transform hover:scale-105 text-sm"><span>✨ AI Image</span></button>
+                <button id="ai-palette-btn" class="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 shadow-lg transition-transform transform hover:scale-105 text-sm"><span>✨ AI Palette</span></button>
+            </div>
+        </div>
+
+        <!-- Middle Content (Canvas + Layers) -->
+        <div class="flex-1 flex overflow-hidden">
+            <main class="flex-1 flex items-center justify-center p-4 overflow-auto"><div id="canvas-container" class="canvas-container shadow-2xl"><canvas id="paint-canvas"></canvas><canvas id="mask-canvas"></canvas></div></main>
+            <div class="w-64 bg-gray-900 p-4 flex flex-col shadow-inner">
+                <h2 class="text-lg font-semibold mb-4 border-b border-gray-700 pb-2">Layers</h2>
+                <div id="layers-panel" class="layers-panel flex-1 overflow-y-auto space-y-2"></div>
+                <div class="mt-4 flex space-x-2">
+                    <button id="add-layer-btn" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg text-sm">Add Layer</button>
+                    <button id="remove-layer-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold p-2 rounded-lg" title="Remove Selected Layer"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bottom Bar -->
+        <div class="bg-gray-900 h-16 flex items-center justify-center px-4 space-x-8 shadow-inner z-10 border-t border-gray-700">
+             <div class="flex items-center space-x-3"><label for="color-picker" class="text-sm font-medium">Color:</label><input type="color" id="color-picker" value="#ffffff" class="w-10 h-10 rounded-full border-2 border-gray-600 cursor-pointer"></div>
+             <div class="flex items-center space-x-3"><label for="brush-size" class="text-sm font-medium">Size:</label><input type="range" id="brush-size" min="1" max="100" value="5" class="w-40 cursor-pointer"><span id="brush-size-label" class="text-sm w-8 text-center bg-gray-700 rounded-md py-1">5</span></div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="flip-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-xs transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">Flip Layer</h3><button id="close-flip-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><div class="flex flex-col space-y-4"><button id="flip-horizontal-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">Flip Horizontal</button><button id="flip-vertical-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">Flip Vertical</button></div></div></div>
+    <div id="rotate-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-xs transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">Rotate Layer</h3><button id="close-rotate-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><label for="rotate-angle" class="text-sm text-gray-400">Angle (degrees):</label><input type="number" id="rotate-angle" value="90" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 mt-2 mb-4 text-white"><button id="apply-rotate-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">Apply Rotation</button></div></div>
+    <div id="expand-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-xl transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ Expand Canvas</h3><button id="close-expand-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><p class="text-gray-400 mb-4">Add padding (in pixels) and describe the scene to have AI fill the new space.</p><div class="grid grid-cols-4 gap-4 mb-4"><input type="number" id="expand-top" placeholder="Top" class="w-full bg-gray-900 border text-center border-gray-700 rounded-lg p-2 text-white"><input type="number" id="expand-right" placeholder="Right" class="w-full bg-gray-900 border text-center border-gray-700 rounded-lg p-2 text-white"><input type="number" id="expand-bottom" placeholder="Bottom" class="w-full bg-gray-900 border text-center border-gray-700 rounded-lg p-2 text-white"><input type="number" id="expand-left" placeholder="Left" class="w-full bg-gray-900 border text-center border-gray-700 rounded-lg p-2 text-white"></div><input type="text" id="expand-prompt" placeholder="Optional: Describe the scene to help the AI..." class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 mb-4 text-white"><div id="expand-preview" class="h-48 bg-gray-900 rounded-lg flex items-center justify-center mb-4"><span class="text-gray-500">Preview</span></div><div class="flex justify-end space-x-4"><button id="generate-expand-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">Generate Preview</button><button id="apply-expand-btn" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg disabled:bg-gray-600" disabled>Apply & Resize</button></div></div></div>
+    <div id="ai-texture-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-lg transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ AI Texture Generator</h3><button id="close-ai-texture-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><p class="text-gray-400 mb-4">Describe the texture you want to create.</p><div class="flex space-x-2 mb-4"><input type="text" id="ai-texture-prompt-input" placeholder="e.g., 'worn wood grain, seamless'" class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-green-500"><button id="generate-texture-btn" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg">Generate</button></div><div id="texture-preview-container" class="h-80 bg-gray-900 rounded-lg flex items-center justify-center mb-4"><span class="text-gray-500">Texture preview will appear here</span></div><button id="add-texture-to-canvas-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:bg-gray-600 disabled:cursor-not-allowed" disabled>Add as New Layer</button></div></div>
+    <div id="ai-story-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-2xl transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ AI Story Generator</h3><button id="close-ai-story-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><div class="grid grid-cols-2 gap-6"><div id="story-image-container" class="bg-gray-900 rounded-lg flex items-center justify-center"><span class="text-gray-500">Your artwork will appear here</span></div><div id="story-text-container" class="bg-gray-900 rounded-lg p-4 h-64 overflow-y-auto"><p class="text-gray-400">Click "Generate Story" for a narrative inspired by your art.</p></div></div><div class="mt-6 flex justify-end"><button id="get-story-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg">Generate Story</button></div></div></div>
+    <div id="ai-edit-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-2xl transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ Magic Edit</h3><button id="close-ai-edit-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><div class="grid grid-cols-2 gap-6"><div id="edit-input-container"><p class="text-gray-400 mb-2">1. Your masked image</p><div id="edit-preview" class="h-64 bg-gray-900 rounded-lg flex items-center justify-center text-gray-500 border-2 border-dashed border-gray-700"><span>Image preview</span></div><p class="text-gray-400 mt-4 mb-2">2. Describe the edit</p><input type="text" id="ai-edit-prompt-input" placeholder="e.g., 'make the sphere glow'" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"></div><div id="edit-output-container"><p class="text-gray-400 mb-2">3. AI Generated Result</p><div id="edit-result-preview" class="h-full bg-gray-900 rounded-lg flex items-center justify-center text-gray-500"><span>Result Preview</span></div></div></div><div class="mt-6 flex justify-end space-x-4"><button id="generate-edit-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">Generate</button><button id="apply-edit-btn" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg disabled:bg-gray-600" disabled>Apply to Layer</button></div></div></div>
+    <div id="ai-sketch-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-4xl transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ AI Sketch Assistant</h3><button id="close-ai-sketch-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><div class="grid grid-cols-2 gap-6"><div id="sketch-input-container"><p class="text-gray-400 mb-2">1. Your Sketch (from active layer)</p><div id="sketch-preview" class="h-64 bg-gray-900 rounded-lg flex items-center justify-center text-gray-500 border-2 border-dashed border-gray-700"><span>Your sketch will appear here</span></div><p class="text-gray-400 mt-4 mb-2">2. Describe the final image</p><input type="text" id="ai-sketch-prompt-input" placeholder="e.g., 'A detailed astronaut in a photorealistic style'" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-rose-500"></div><div id="sketch-output-container"><p class="text-gray-400 mb-2">3. AI Generated Result</p><div id="sketch-result-preview" class="h-full bg-gray-900 rounded-lg flex items-center justify-center text-gray-500"><span>Result Preview</span></div></div></div><div class="mt-6 flex justify-end space-x-4"><button id="generate-sketch-btn" class="bg-rose-500 hover:bg-rose-600 text-white font-semibold py-2 px-4 rounded-lg">Generate</button><button id="add-sketch-result-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:bg-gray-600" disabled>Add to Canvas</button></div></div></div>
+    <div id="ai-feedback-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-2xl transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ AI Art Feedback</h3><button id="close-ai-feedback-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><div class="grid grid-cols-2 gap-6"><div id="feedback-image-container" class="bg-gray-900 rounded-lg flex items-center justify-center"><span class="text-gray-500">Your artwork will appear here</span></div><div id="feedback-text-container" class="bg-gray-900 rounded-lg p-4 h-64 overflow-y-auto"><p class="text-gray-400">Click "Get Feedback" to receive an analysis of your artwork.</p></div></div><div class="mt-6 flex justify-end"><button id="get-feedback-btn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg">Get Feedback</button></div></div></div>
+    <div id="ai-music-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ AI Music Generator</h3><button id="close-ai-music-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><p class="text-gray-400 mb-4">Upload an image to generate a musical interpretation of its mood and theme.</p><input type="file" id="music-image-upload" accept="image/*" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-500 file:text-white hover:file:bg-green-600 mb-4"><div id="music-image-preview" class="h-48 bg-gray-900 rounded-lg flex items-center justify-center text-gray-500 mb-4"><span>Image Preview</span></div><div id="music-player-container" class="text-center"></div></div></div>
+    <div id="ai-style-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-2xl transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ AI Art Style Transfer</h3><button id="close-ai-style-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><div class="grid grid-cols-2 gap-6"><div id="style-input-container"><p class="text-gray-400 mb-2">1. Upload your image</p><input type="file" id="style-image-upload" accept="image/*" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-500 file:text-white hover:file:bg-orange-600 mb-4"><div id="style-image-preview" class="h-48 bg-gray-900 rounded-lg flex items-center justify-center text-gray-500"><span>Image Preview</span></div></div><div id="style-output-container"><p class="text-gray-400 mb-2">2. Choose a style</p><select id="art-style-select" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 mb-4 text-white"><option>Impressionism</option><option>Cubism</option><option>Surrealism</option><option>Pop Art</option><option>Art Nouveau</option><option>Japanese Ukiyo-e</option><option>Abstract</option><option>Cyberpunk</option><option>Origami</option></select><div id="style-result-preview" class="h-48 bg-gray-900 rounded-lg flex items-center justify-center text-gray-500"><span>Result Preview</span></div></div></div><div class="mt-6 flex justify-end space-x-4"><button id="apply-style-btn" class="bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded-lg disabled:bg-gray-600" disabled>Apply Style</button><button id="add-styled-image-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:bg-gray-600" disabled>Add to Canvas</button></div></div></div>
+    <div id="ai-palette-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ AI Color Palette Generator</h3><button id="close-ai-palette-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><p class="text-gray-400 mb-4">Describe a theme, and let AI find the perfect colors.</p><div class="flex space-x-2 mb-4"><input type="text" id="ai-palette-prompt-input" placeholder="e.g., 'Cyberpunk city at night'" class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"><button id="generate-palette-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg">Generate</button></div><div id="palette-container" class="h-48 flex items-center justify-center"></div></div></div>
+    <div id="ai-image-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-lg transform scale-95"><div class="flex justify-between items-center mb-6"><h3 class="text-2xl font-bold text-white">✨ AI Image Generator</h3><button id="close-ai-image-modal-btn" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button></div><p class="text-gray-400 mb-4">Describe the image you want to create.</p><div class="flex space-x-2 mb-4"><input type="text" id="ai-image-prompt-input" placeholder="e.g., 'A majestic dragon flying over a castle'" class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-teal-500"><button id="generate-image-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg">Generate</button></div><div id="image-preview-container" class="h-80 bg-gray-900 rounded-lg flex items-center justify-center mb-4"><span class="text-gray-500">Image preview will appear here</span></div><button id="add-image-to-canvas-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:bg-gray-600 disabled:cursor-not-allowed" disabled>Add to New Layer</button></div></div>
+    <div id="alert-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="modal-content bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-sm transform scale-95"><h3 class="text-xl font-bold text-white mb-4" id="alert-title">Alert</h3><p class="text-gray-300 mb-6" id="alert-message"></p><button id="close-alert-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">OK</button></div></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Element References ---
+            const canvas = document.getElementById('paint-canvas'), ctx = canvas.getContext('2d');
+            const maskCanvas = document.getElementById('mask-canvas'), maskCtx = maskCanvas.getContext('2d');
+            const colorPicker = document.getElementById('color-picker'), brushSizeSlider = document.getElementById('brush-size'), brushSizeLabel = document.getElementById('brush-size-label');
+            const toolBtns = document.querySelectorAll('.tool-btn'), addLayerBtn = document.getElementById('add-layer-btn'), removeLayerBtn = document.getElementById('remove-layer-btn'), layersPanel = document.getElementById('layers-panel');
+            const fontOptions = document.getElementById('font-options'), fontFamilySelect = document.getElementById('font-family'), fontSizeInput = document.getElementById('font-size');
+            const actionFlipBtn = document.getElementById('action-flip'), actionRotateBtn = document.getElementById('action-rotate'), actionExpandBtn = document.getElementById('action-expand');
+            const undoBtn = document.getElementById('action-undo'), redoBtn = document.getElementById('action-redo');
+            // Modals
+            const flipModal = document.getElementById('flip-modal'), rotateModal = document.getElementById('rotate-modal'), expandModal = document.getElementById('expand-modal');
+            const aiTextureModal = document.getElementById('ai-texture-modal'), aiStoryModal = document.getElementById('ai-story-modal'), aiEditModal = document.getElementById('ai-edit-modal'), aiSketchModal = document.getElementById('ai-sketch-modal'), aiFeedbackModal = document.getElementById('ai-feedback-modal'), aiMusicModal = document.getElementById('ai-music-modal'), aiStyleModal = document.getElementById('ai-style-modal'), aiPaletteModal = document.getElementById('ai-palette-modal'), aiImageModal = document.getElementById('ai-image-modal'), alertModal = document.getElementById('alert-modal');
+            // AI Texture Elements
+            const aiTextureBtn = document.getElementById('ai-texture-btn'), closeAiTextureModalBtn = document.getElementById('close-ai-texture-modal-btn'), aiTexturePromptInput = document.getElementById('ai-texture-prompt-input'), generateTextureBtn = document.getElementById('generate-texture-btn'), texturePreviewContainer = document.getElementById('texture-preview-container'), addTextureToCanvasBtn = document.getElementById('add-texture-to-canvas-btn');
+            // AI Story Elements
+            const aiStoryBtn = document.getElementById('ai-story-btn'), closeAiStoryModalBtn = document.getElementById('close-ai-story-modal-btn'), storyImageContainer = document.getElementById('story-image-container'), storyTextContainer = document.getElementById('story-text-container'), getStoryBtn = document.getElementById('get-story-btn');
+            // AI Edit (Inpainting) Elements
+            const closeAiEditModalBtn = document.getElementById('close-ai-edit-modal-btn'), editPreview = document.getElementById('edit-preview'), aiEditPromptInput = document.getElementById('ai-edit-prompt-input'), editResultPreview = document.getElementById('edit-result-preview'), generateEditBtn = document.getElementById('generate-edit-btn'), applyEditBtn = document.getElementById('apply-edit-btn');
+            // AI Sketch Elements
+            const aiSketchBtn = document.getElementById('ai-sketch-btn'), closeAiSketchModalBtn = document.getElementById('close-ai-sketch-modal-btn'), sketchPreview = document.getElementById('sketch-preview'), aiSketchPromptInput = document.getElementById('ai-sketch-prompt-input'), sketchResultPreview = document.getElementById('sketch-result-preview'), generateSketchBtn = document.getElementById('generate-sketch-btn'), addSketchResultBtn = document.getElementById('add-sketch-result-btn');
+            // AI Feedback Elements
+            const aiFeedbackBtn = document.getElementById('ai-feedback-btn'), closeAiFeedbackModalBtn = document.getElementById('close-ai-feedback-modal-btn'), feedbackImageContainer = document.getElementById('feedback-image-container'), feedbackTextContainer = document.getElementById('feedback-text-container'), getFeedbackBtn = document.getElementById('get-feedback-btn');
+            // AI Music Elements
+            const aiMusicBtn = document.getElementById('ai-music-btn'), closeAiMusicModalBtn = document.getElementById('close-ai-music-modal-btn'), musicImageUpload = document.getElementById('music-image-upload'), musicImagePreview = document.getElementById('music-image-preview'), musicPlayerContainer = document.getElementById('music-player-container');
+            // AI Style Transfer Elements
+            const aiStyleBtn = document.getElementById('ai-style-btn'), closeAiStyleModalBtn = document.getElementById('close-ai-style-modal-btn'), styleImageUpload = document.getElementById('style-image-upload');
+            const styleImagePreview = document.getElementById('style-image-preview'), artStyleSelect = document.getElementById('art-style-select'), styleResultPreview = document.getElementById('style-result-preview');
+            const applyStyleBtn = document.getElementById('apply-style-btn'), addStyledImageBtn = document.getElementById('add-styled-image-btn');
+            // AI Palette Elements
+            const aiPaletteBtn = document.getElementById('ai-palette-btn'), closeAiPaletteModalBtn = document.getElementById('close-ai-palette-modal-btn'), aiPalettePromptInput = document.getElementById('ai-palette-prompt-input'), generatePaletteBtn = document.getElementById('generate-palette-btn'), paletteContainer = document.getElementById('palette-container');
+            // AI Image Elements
+            const aiImageBtn = document.getElementById('ai-image-btn'), closeAiImageModalBtn = document.getElementById('close-ai-image-modal-btn'), aiImagePromptInput = document.getElementById('ai-image-prompt-input'), generateImageBtn = document.getElementById('generate-image-btn'), imagePreviewContainer = document.getElementById('image-preview-container'), addImageToCanvasBtn = document.getElementById('add-image-to-canvas-btn');
+            // Alert Modal Elements
+            const alertTitle = document.getElementById('alert-title'), alertMessage = document.getElementById('alert-message'), closeAlertBtn = document.getElementById('close-alert-btn');
+
+            // --- State Variables ---
+            let isDrawing = false, activeTool = 'brush', brushSize = 5, currentColor = '#ffffff', activeLayerIndex = -1, lastX = 0, lastY = 0;
+            let layers = [];
+            let history = [], historyIndex = -1;
+            let generatedExpandedImageBase64 = null, generatedTextureBase64 = null, editedImageBase64 = null, generatedImageBase64 = null, styledImageBase64 = null, sketchResultBase64 = null, uploadedImageBase64 = null, musicImageBase64 = null;
+            let musicPlayer = null, musicPart = null;
+
+            // --- Initialization ---
+            function initialize() {
+                const canvasContainer = document.getElementById('canvas-container');
+                const rect = canvasContainer.parentElement.getBoundingClientRect();
+                canvas.width = maskCanvas.width = rect.width - 40;
+                canvas.height = maskCanvas.height = rect.height - 40;
+                addNewLayer(false); // Don't save state here
+                addEventListeners();
+                saveState(); // Save the initial blank state
+            }
+            
+            // --- History (Undo/Redo) ---
+            function updateUndoRedoButtons() {
+                undoBtn.disabled = historyIndex <= 0;
+                redoBtn.disabled = historyIndex >= history.length - 1;
+            }
+
+            function saveState() {
+                if (historyIndex < history.length - 1) {
+                    history = history.slice(0, historyIndex + 1);
+                }
+                const state = {
+                    layers: layers.map(layer => ({
+                        data: layer.canvas.toDataURL(),
+                        name: layer.name,
+                        visible: layer.visible,
+                    })),
+                    width: canvas.width,
+                    height: canvas.height,
+                    activeLayerIndex: activeLayerIndex
+                };
+                history.push(state);
+                historyIndex = history.length - 1;
+                updateUndoRedoButtons();
+            }
+
+            function restoreState() {
+                if (historyIndex < 0 || historyIndex >= history.length) return;
+                const state = history[historyIndex];
+                
+                if (canvas.width !== state.width || canvas.height !== state.height) {
+                    canvas.width = maskCanvas.width = state.width;
+                    canvas.height = maskCanvas.height = state.height;
+                }
+                
+                layers = []; // Clear current layers
+                let layersToLoad = state.layers.length;
+                if (layersToLoad === 0) {
+                    renderLayersPanel(); redrawCanvas(); updateUndoRedoButtons(); return;
+                }
+
+                state.layers.forEach(savedLayer => {
+                    const newCanvas = document.createElement('canvas');
+                    newCanvas.width = state.width; newCanvas.height = state.height;
+                    const newCtx = newCanvas.getContext('2d');
+                    
+                    const newLayer = { canvas: newCanvas, ctx: newCtx, name: savedLayer.name, visible: savedLayer.visible, isNaming: false };
+                    layers.push(newLayer);
+
+                    const img = new Image();
+                    img.onload = () => {
+                        newCtx.drawImage(img, 0, 0);
+                        layersToLoad--;
+                        if (layersToLoad === 0) {
+                            activeLayerIndex = state.activeLayerIndex;
+                            if (activeLayerIndex >= layers.length) {
+                                activeLayerIndex = layers.length - 1;
+                            }
+                            renderLayersPanel();
+                            redrawCanvas();
+                            updateBrush();
+                        }
+                    };
+                    img.src = savedLayer.data;
+                });
+                updateUndoRedoButtons();
+            }
+            
+            function undoState() { if (historyIndex > 0) { historyIndex--; restoreState(); } }
+            function redoState() { if (historyIndex < history.length - 1) { historyIndex++; restoreState(); } }
+
+
+            // --- Modal Logic ---
+            function showModal(modal) { modal.classList.remove('opacity-0', 'pointer-events-none'); modal.querySelector('.modal-content').classList.remove('scale-95'); }
+            function hideModal(modal) {
+                modal.classList.add('opacity-0', 'pointer-events-none');
+                modal.querySelector('.modal-content').classList.add('scale-95');
+                if (modal.id === 'ai-music-modal') stopMusic();
+            }
+            function showAlert(message, title = "Alert") { alertTitle.textContent = title; alertMessage.textContent = message; showModal(alertModal); }
+            
+            // --- Base64 Converter ---
+            function fileToBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = error => reject(error);
+                });
+            }
+
+            // --- Gemini API: AI Texture Generator ---
+            async function generateTexture() { /* ... */ }
+
+            // --- Gemini API: AI Story Generator ---
+             async function getStory() { /* ... */ }
+
+            // --- Gemini API: Magic Edit (Inpainting) ---
+            async function generateInpainting() { /* ... */ }
+             function applyInpaintingToLayer() { /* ... */ }
+
+            // --- Gemini API: Sketch Assistant ---
+            async function generateSketchCompletion() { /* ... */ }
+            function addSketchResultToCanvas() { /* ... */ }
+
+            // --- Gemini API: Art Feedback ---
+            async function getArtFeedback() { /* ... */ }
+
+            // --- Gemini API: Layer Namer ---
+            async function generateLayerName(layerIndex) { /* ... */ }
+
+            // --- Gemini API: Music Generation ---
+            async function generateMusicFromImage() { /* ... */ }
+            function createAndPlayMusic(description) { /* ... */ }
+            function playMusic(notes, duration, tempo) { /* ... */ }
+            function stopMusic() { /* ... */ }
+
+            // --- Gemini API: Art Style Transfer ---
+            async function applyArtStyle() { /* ... */ }
+            function addStyledImageToNewLayer() { if (styledImageBase64) { addImageToCanvas(styledImageBase64); } }
+            
+            // --- Gemini API: Image Generation ---
+            async function generateImageFromPrompt() { /* ... */ }
+            function addImageToNewLayer() { if (generatedImageBase64) { addImageToCanvas(generatedImageBase64); } }
+            
+            // --- Gemini API: Color Palette ---
+            async function generateColorPalette() { /* ... */ }
+            function displayPalette(colors) { /* ... */ }
+
+            // --- Generic Image to Canvas Function ---
+            function addImageToCanvas(base64Data, modalToHide) {
+                const img = new Image();
+                img.onload = () => {
+                    addNewLayer(false); // don't save state here
+                    const activeLayerCtx = layers[activeLayerIndex].ctx;
+                    const canvasAspectRatio = canvas.width / canvas.height, imageAspectRatio = img.width / img.height;
+                    let drawWidth, drawHeight, dx, dy;
+                    if (canvasAspectRatio > imageAspectRatio) {
+                        drawHeight = canvas.height; drawWidth = img.width * (canvas.height / img.height);
+                    } else {
+                        drawWidth = canvas.width; drawHeight = img.height * (canvas.width / img.width);
+                    }
+                    dx = (canvas.width - drawWidth) / 2; dy = (canvas.height - drawHeight) / 2;
+                    activeLayerCtx.drawImage(img, dx, dy, drawWidth, drawHeight);
+                    redrawCanvas();
+                    saveState(); // Save state after image is drawn
+                    if(modalToHide) hideModal(modalToHide);
+                };
+                img.src = `data:image/png;base64,${base64Data}`;
+            }
+
+             // --- Transformation Functions ---
+            function flipLayer(direction) {
+                const layer = layers[activeLayerIndex];
+                if (!layer) { showAlert("Please select a layer to flip."); return; }
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                if (direction === 'horizontal') {
+                    tempCtx.translate(canvas.width, 0); tempCtx.scale(-1, 1);
+                } else {
+                    tempCtx.translate(0, canvas.height); tempCtx.scale(1, -1);
+                }
+                tempCtx.drawImage(layer.canvas, 0, 0);
+                layer.ctx.clearRect(0, 0, canvas.width, canvas.height);
+                layer.ctx.drawImage(tempCanvas, 0, 0);
+                redrawCanvas();
+                saveState();
+                hideModal(flipModal);
+            }
+
+            function rotateLayer(degrees) {
+                const layer = layers[activeLayerIndex];
+                if (!layer) { showAlert("Please select a layer to rotate."); return; }
+                const angle = degrees * Math.PI / 180;
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.translate(canvas.width / 2, canvas.height / 2);
+                tempCtx.rotate(angle);
+                tempCtx.drawImage(layer.canvas, -canvas.width / 2, -canvas.height / 2);
+                layer.ctx.clearRect(0, 0, canvas.width, canvas.height);
+                layer.ctx.drawImage(tempCanvas, 0, 0);
+                redrawCanvas();
+                saveState();
+                hideModal(rotateModal);
+            }
+            
+            async function expandCanvasWithAI() {
+                /* ... */
+            }
+
+            function applyExpandedImage() {
+                if (!generatedExpandedImageBase64) return;
+                // ... logic to resize layers and canvas ...
+                layers.forEach(layer => {
+                    // ... resize logic ...
+                });
+                // ... resize logic ...
+                const img = new Image();
+                img.onload = () => {
+                   // ... logic ...
+                   saveState(); // Save state after expansion
+                   hideModal(expandModal);
+                };
+                img.src = `data:image/png;base64,${generatedExpandedImageBase64}`;
+            }
+
+            // --- Layer Management & Canvas Core ---
+            function addNewLayer(shouldSaveState = true) {
+                const layerCanvas = document.createElement('canvas');
+                layerCanvas.width = canvas.width; layerCanvas.height = canvas.height;
+                const layer = { canvas: layerCanvas, ctx: layerCanvas.getContext('2d'), name: `Layer ${layers.length + 1}`, visible: true, isNaming: false };
+                layers.push(layer);
+                setActiveLayer(layers.length - 1);
+                if (shouldSaveState) saveState();
+            }
+
+            function removeActiveLayer() {
+                if (layers.length <= 1) { showAlert("Cannot remove the last layer."); return; }
+                layers.splice(activeLayerIndex, 1);
+                setActiveLayer(Math.min(activeLayerIndex, layers.length - 1));
+                saveState();
+            }
+
+            function setActiveLayer(index) {
+                activeLayerIndex = index;
+                renderLayersPanel();
+                redrawCanvas();
+                updateBrush();
+            }
+            function renderLayersPanel() { /* ... */ }
+            function redrawCanvas() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                layers.forEach(layer => { if (layer.visible) { ctx.drawImage(layer.canvas, 0, 0); } });
+            }
+            function draw(e) { /* ... */ }
+            function floodFill(startX, startY, fillColor) { /* ...; saveState(); */ }
+            function drawText(e) { /* ...; redrawCanvas(); saveState(); */ }
+            function handleMouseDown(e) { /* ... */ }
+            function handleMouseUp() { if(isDrawing) { isDrawing = false; saveState(); } else { isDrawing = false; } }
+            function handleToolChange(tool) { /* ... */ }
+            function updateBrush() { /* ... */ }
+            
+            // --- Event Listeners ---
+            function addEventListeners() {
+                // ... (Existing event listeners) ...
+                addLayerBtn.addEventListener('click', () => addNewLayer(true));
+                removeLayerBtn.addEventListener('click', removeActiveLayer);
+                undoBtn.addEventListener('click', undoState);
+                redoBtn.addEventListener('click', redoState);
+                // ...
+            }
+
+            // --- Start the App ---
+            initialize();
+            
+            // --- Minified Core Functions (to save space) ---
+            async function generateTexture() { const userPrompt = aiTexturePromptInput.value; if (!userPrompt) { showAlert("Please describe the texture you want to create."); return; } texturePreviewContainer.innerHTML = '<div class="loader"></div>'; generateTextureBtn.disabled = true; addTextureToCanvasBtn.disabled = true; generatedTextureBase64 = null; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`; const payload = { instances: [{ prompt: `${userPrompt}, seamless, tileable texture, flat pattern` }], parameters: { "sampleCount": 1 } }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const base64Data = result.predictions?.[0]?.bytesBase64Encoded; if (!base64Data) throw new Error("Invalid image data in API response."); generatedTextureBase64 = base64Data; const imageUrl = `data:image/png;base64,${base64Data}`; texturePreviewContainer.innerHTML = `<img src="${imageUrl}" class="max-w-full max-h-full object-contain rounded-lg">`; addTextureToCanvasBtn.disabled = false; } catch (error) { console.error("Gemini Texture API call failed:", error); texturePreviewContainer.innerHTML = `<p class="text-red-400 p-4 text-center">Failed to generate texture. Please try again.</p>`; } finally { generateTextureBtn.disabled = false; } }
+            async function getStory() { const canvasImage = canvas.toDataURL('image/png'); storyImageContainer.innerHTML = `<img src="${canvasImage}" class="max-w-full max-h-full object-contain rounded-lg">`; storyTextContainer.innerHTML = '<div class="loader mx-auto mt-8"></div>'; getStoryBtn.disabled = true; const imageData = canvasImage.split(',')[1]; const userPrompt = "You are an imaginative storyteller. Look at this image and write a short, creative story or poem (less than 150 words) that captures its essence. Format your response with markdown for readability."; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`; const payload = { contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: 'image/png', data: imageData } } ] }] }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const storyText = result.candidates?.[0]?.content?.parts?.[0]?.text; if (storyText) { storyTextContainer.innerHTML = `<div class="prose prose-invert text-gray-300">${storyText.replace(/\n/g, '<br>')}</div>`; } else { throw new Error("Could not generate story."); } } catch (error) { console.error("Gemini Story API call failed:", error); storyTextContainer.innerHTML = `<p class="text-red-400">Failed to get story. Please try again.</p>`; } finally { getStoryBtn.disabled = false; } }
+            async function generateInpainting() { const activeLayer = layers[activeLayerIndex]; if (!activeLayer) { showAlert("No active layer selected."); return; } const userPrompt = aiEditPromptInput.value; if (!userPrompt) { showAlert("Please describe the edit you want to make."); return; } editResultPreview.innerHTML = '<div class="loader"></div>'; generateEditBtn.disabled = true; applyEditBtn.disabled = true; editedImageBase64 = null; const image = activeLayer.canvas.toDataURL('image/png').split(',')[1]; const mask = maskCanvas.toDataURL('image/png').split(',')[1]; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`; const payload = { contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: 'image/png', data: image } }, { inlineData: { mimeType: 'image/png', data: mask } } ] }], generationConfig: { responseModalities: ['IMAGE'] }, }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const base64Data = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data; if (!base64Data) throw new Error("Invalid image data in API response."); editedImageBase64 = base64Data; const imageUrl = `data:image/png;base64,${editedImageBase64}`; editResultPreview.innerHTML = `<img src="${imageUrl}" class="max-w-full max-h-full object-contain rounded-lg">`; applyEditBtn.disabled = false; } catch (error) { console.error("Gemini Inpainting API call failed:", error); editResultPreview.innerHTML = `<p class="text-red-400 p-4 text-center">Failed to generate edit. Please try again.</p>`; } finally { generateEditBtn.disabled = false; } }
+            function applyInpaintingToLayer() { if (editedImageBase64 && activeLayerIndex > -1) { const img = new Image(); img.onload = () => { const activeLayerCtx = layers[activeLayerIndex].ctx; activeLayerCtx.clearRect(0, 0, canvas.width, canvas.height); activeLayerCtx.drawImage(img, 0, 0); redrawCanvas(); saveState(); hideModal(aiEditModal); }; img.src = `data:image/png;base64,${editedImageBase64}`; } }
+            async function generateSketchCompletion() { const activeLayer = layers[activeLayerIndex]; if (!activeLayer) { showAlert("Please select a layer first."); return; } const sketchData = activeLayer.canvas.toDataURL('image/png').split(',')[1]; const userPrompt = aiSketchPromptInput.value; if (!userPrompt) { showAlert("Please describe what you want to create from your sketch."); return; } sketchResultPreview.innerHTML = '<div class="loader"></div>'; generateSketchBtn.disabled = true; addSketchResultBtn.disabled = true; sketchResultBase64 = null; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`; const payload = { contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: 'image/png', data: sketchData } } ] }], generationConfig: { responseModalities: ['IMAGE'] }, }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const base64Data = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data; if (!base64Data) throw new Error("Invalid image data in API response."); sketchResultBase64 = base64Data; const imageUrl = `data:image/png;base64,${sketchResultBase64}`; sketchResultPreview.innerHTML = `<img src="${imageUrl}" class="max-w-full max-h-full object-contain rounded-lg">`; addSketchResultBtn.disabled = false; } catch (error) { console.error("Gemini Sketch API call failed:", error); sketchResultPreview.innerHTML = `<p class="text-red-400 p-4 text-center">Failed to generate image. Please try again.</p>`; } finally { generateSketchBtn.disabled = false; } }
+            function addSketchResultToCanvas() { if (sketchResultBase64) { addImageToCanvas(sketchResultBase64, aiSketchModal); } }
+            async function getArtFeedback() { const canvasImage = canvas.toDataURL('image/png'); feedbackImageContainer.innerHTML = `<img src="${canvasImage}" class="max-w-full max-h-full object-contain rounded-lg">`; feedbackTextContainer.innerHTML = '<div class="loader mx-auto mt-8"></div>'; getFeedbackBtn.disabled = true; const imageData = canvasImage.split(',')[1]; const userPrompt = "Act as a friendly and constructive art teacher. Analyze this artwork and provide feedback. Comment on the composition, use of color, potential focal points, and suggest one or two areas for improvement. Format your response with markdown for readability."; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`; const payload = { contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: 'image/png', data: imageData } } ] }] }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const feedbackText = result.candidates?.[0]?.content?.parts?.[0]?.text; if (feedbackText) { feedbackTextContainer.innerHTML = `<div class="prose prose-invert text-gray-300">${feedbackText.replace(/\n/g, '<br>')}</div>`; } else { throw new Error("Could not generate feedback."); } } catch (error) { console.error("Gemini Feedback API call failed:", error); feedbackTextContainer.innerHTML = `<p class="text-red-400">Failed to get feedback. Please try again.</p>`; } finally { getFeedbackBtn.disabled = false; } }
+            async function generateLayerName(layerIndex) { const layer = layers[layerIndex]; if (!layer) return; const layerData = layer.ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height).data; const isEmpty = !layerData.some(channel => channel !== 0); if (isEmpty) { showAlert("Cannot name an empty layer."); return; } layer.isNaming = true; renderLayersPanel(); const imageData = layer.canvas.toDataURL('image/png').split(',')[1]; const userPrompt = "Describe the main subject of this image in 2-4 words to use as a layer name."; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`; const payload = { contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: 'image/png', data: imageData } } ] }] }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const newName = result.candidates?.[0]?.content?.parts?.[0]?.text; if (newName) { layer.name = newName.trim(); } else { throw new Error("Could not generate a name."); } } catch (error) { console.error("Gemini Layer Namer API call failed:", error); showAlert("Failed to generate a layer name."); } finally { layer.isNaming = false; renderLayersPanel(); saveState(); } }
+            async function generateMusicFromImage() { if (!musicImageBase64) { showAlert("Please upload an image first."); return; } musicPlayerContainer.innerHTML = '<div class="loader"></div>'; stopMusic(); const mimeType = musicImageUpload.files[0].type; const userPrompt = "Analyze this image and describe a simple, looping, ambient musical melody that captures its mood, colors, and theme. Focus on concepts like tempo (e.g., slow, fast), mood (e.g., happy, melancholic, mysterious), and instrumentation (e.g., piano, synth pads, strings). Keep the description to one sentence."; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`; const payload = { contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: mimeType, data: musicImageBase64 } } ] }] }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const description = result.candidates?.[0]?.content?.parts?.[0]?.text; if (!description) throw new Error("Could not generate music description."); createAndPlayMusic(description); } catch (error) { console.error("Gemini Music Prompt API call failed:", error); musicPlayerContainer.innerHTML = `<p class="text-red-400">Failed to generate music. Please try again.</p>`; } }
+            function createAndPlayMusic(description) { let notes = ['C4', 'E4', 'G4', 'B4']; let duration = '4n'; let tempo = 120; if (description.includes('slow') || description.includes('calm') || description.includes('melancholic')) { tempo = 80; duration = '2n'; } if (description.includes('fast') || description.includes('happy') || description.includes('upbeat')) { tempo = 160; duration = '8n'; } if (description.includes('mysterious') || description.includes('dark')) { notes = ['A3', 'C4', 'E4', 'G4']; } musicPlayerContainer.innerHTML = `<p class="text-gray-400 text-sm mb-2">"${description}"</p><button id="play-music-btn" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg">Play Music</button>`; const playBtn = document.getElementById('play-music-btn'); playBtn.addEventListener('click', async () => { await Tone.start(); if (Tone.Transport.state === 'started') { stopMusic(); playBtn.textContent = 'Play Music'; } else { playMusic(notes, duration, tempo); playBtn.textContent = 'Stop Music'; } }); }
+            function playMusic(notes, duration, tempo) { if (!musicPlayer) { musicPlayer = new Tone.Synth({ oscillator: { type: 'fmsine' }, envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 1 } }).toDestination(); } musicPart = new Tone.Sequence((time, note) => { musicPlayer.triggerAttackRelease(note, duration, time); }, notes, duration).start(0); Tone.Transport.bpm.value = tempo; Tone.Transport.start(); }
+            function stopMusic() { if (Tone.Transport.state === 'started') { Tone.Transport.stop(); Tone.Transport.cancel(); if (musicPart) { musicPart.dispose(); musicPart = null; } } }
+            async function generateImageFromPrompt() { const userPrompt = aiImagePromptInput.value; if (!userPrompt) { showAlert("Please describe the image you want to create."); return; } imagePreviewContainer.innerHTML = '<div class="loader"></div>'; generateImageBtn.disabled = true; addImageToCanvasBtn.disabled = true; generatedImageBase64 = null; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`; const payload = { instances: [{ prompt: userPrompt }], parameters: { "sampleCount": 1 } }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const base64Data = result.predictions?.[0]?.bytesBase64Encoded; if (!base64Data) throw new Error("Invalid image data in API response."); generatedImageBase64 = base64Data; const imageUrl = `data:image/png;base64,${base64Data}`; imagePreviewContainer.innerHTML = `<img src="${imageUrl}" class="max-w-full max-h-full object-contain rounded-lg">`; addImageToCanvasBtn.disabled = false; } catch (error) { console.error("Gemini Image API call failed:", error); imagePreviewContainer.innerHTML = `<p class="text-red-400 p-4 text-center">Failed to generate image. Please try again.</p>`; } finally { generateImageBtn.disabled = false; } }
+            async function generateColorPalette() { const userPrompt = aiPalettePromptInput.value; if (!userPrompt) { showAlert("Please enter a theme for your palette."); return; } paletteContainer.innerHTML = '<div class="loader"></div>'; generatePaletteBtn.disabled = true; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`; const payload = { contents: [{ parts: [{ text: userPrompt }] }], systemInstruction: { parts: [{ text: "You are an expert color palette generator. Based on the user's theme, provide an array of 8 complementary hex color codes in JSON format. Only output the JSON array." }] }, generationConfig: { responseMimeType: "application/json", responseSchema: { type: "ARRAY", items: { type: "STRING" } } } }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text; if (!jsonText) throw new Error("Invalid response from API."); displayPalette(JSON.parse(jsonText)); } catch (error) { console.error("Gemini Palette API call failed:", error); paletteContainer.innerHTML = `<p class="text-red-400">Failed to generate palette.</p>`; } finally { generatePaletteBtn.disabled = false; } }
+            function displayPalette(colors) { paletteContainer.innerHTML = ''; const paletteGrid = document.createElement('div'); paletteGrid.className = 'grid grid-cols-4 gap-3 w-full'; colors.forEach(color => { const swatch = document.createElement('div'); swatch.className = 'w-full h-16 rounded-lg cursor-pointer border-2 border-transparent hover:border-white transition-all transform hover:scale-110'; swatch.style.backgroundColor = color; swatch.title = color; swatch.addEventListener('click', () => { currentColor = color; colorPicker.value = color; updateBrush(); hideModal(aiPaletteModal); }); paletteGrid.appendChild(swatch); }); paletteContainer.appendChild(paletteGrid); }
+            async function applyArtStyle() { if (!uploadedImageBase64) { showAlert("Please upload an image first."); return; } styleResultPreview.innerHTML = '<div class="loader"></div>'; applyStyleBtn.disabled = true; addStyledImageBtn.disabled = true; styledImageBase64 = null; const selectedStyle = artStyleSelect.value; const userPrompt = `Apply the following art style to the image: ${selectedStyle}`; const mimeType = styleImageUpload.files[0].type; const apiKey = ""; const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`; const payload = { contents: [{ parts: [ { text: userPrompt }, { inlineData: { mimeType: mimeType, data: uploadedImageBase64 } } ] }], generationConfig: { responseModalities: ['IMAGE'] }, }; try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(`API Error: ${response.statusText}`); const result = await response.json(); const base64Data = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data; if (!base64Data) throw new Error("Invalid image data in API response."); styledImageBase64 = base64Data; const imageUrl = `data:image/png;base64,${styledImageBase64}`; styleResultPreview.innerHTML = `<img src="${imageUrl}" class="max-w-full max-h-full object-contain rounded-lg">`; addStyledImageBtn.disabled = false; } catch (error) { console.error("Gemini Style Transfer API call failed:", error); styleResultPreview.innerHTML = `<p class="text-red-400 p-4 text-center">Failed to apply style. Please try again.</p>`; } finally { applyStyleBtn.disabled = false; } }
+            function floodFill(startX, startY, fillColor) { const activeLayerCtx = layers[activeLayerIndex].ctx; const imageData = activeLayerCtx.getImageData(0, 0, canvas.width, canvas.height); const data = imageData.data; const startPos = (startY * canvas.width + startX) * 4; const [startR, startG, startB, startA] = [data[startPos], data[startPos + 1], data[startPos + 2], data[startPos + 3]]; const fillR = parseInt(fillColor.slice(1, 3), 16); const fillG = parseInt(fillColor.slice(3, 5), 16); const fillB = parseInt(fillColor.slice(5, 7), 16); if (startR === fillR && startG === fillG && startB === fillB) return; const pixelStack = [[startX, startY]]; while (pixelStack.length) { const [x, y] = pixelStack.pop(); let currentPos = (y * canvas.width + x) * 4; if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue; if (data[currentPos] !== startR || data[currentPos + 1] !== startG || data[currentPos + 2] !== startB || data[currentPos + 3] !== startA) continue; data[currentPos] = fillR; data[currentPos + 1] = fillG; data[currentPos + 2] = fillB; data[currentPos + 3] = 255; pixelStack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); } activeLayerCtx.putImageData(imageData, 0, 0); redrawCanvas(); saveState(); }
+            function drawText(e) { const text = prompt("Enter text:", "Hello World"); if (!text || activeLayerIndex < 0) return; const activeLayerCtx = layers[activeLayerIndex].ctx; activeLayerCtx.font = `${fontSizeInput.value}px ${fontFamilySelect.value}`; activeLayerCtx.fillStyle = currentColor; activeLayerCtx.fillText(text, e.offsetX, e.offsetY); redrawCanvas(); saveState(); }
+            function handleMouseDown(e) { if (activeLayerIndex < 0) return; if (activeTool === 'fill') { floodFill(e.offsetX, e.offsetY, currentColor); return; } if (activeTool === 'text') { drawText(e); return; } isDrawing = true; [lastX, lastY] = [e.offsetX, e.offsetY]; }
+            function handleToolChange(tool) { activeTool = tool; toolBtns.forEach(btn => btn.classList.toggle('active', btn.id === `tool-${tool}`)); fontOptions.classList.toggle('hidden', tool !== 'text'); fontOptions.classList.toggle('flex', tool === 'text'); maskCanvas.style.pointerEvents = tool === 'edit' ? 'auto' : 'none'; if (tool === 'edit') { showAlert("Magic Edit selected. Draw a mask over the area you want to change, then click the button again to open the editor.", "Magic Edit Tool"); } else { maskCtx.clearRect(0,0, maskCanvas.width, maskCanvas.height); } updateBrush(); }
+            function updateBrush() { const contexts = [maskCtx]; if (layers[activeLayerIndex]) contexts.push(layers[activeLayerIndex].ctx); contexts.forEach(currentCtx => { currentCtx.lineWidth = brushSize; currentCtx.lineCap = 'round'; currentCtx.lineJoin = 'round'; }); if (layers[activeLayerIndex]) { const activeLayerCtx = layers[activeLayerIndex].ctx; if (activeTool === 'brush') { activeLayerCtx.globalCompositeOperation = 'source-over'; activeLayerCtx.strokeStyle = currentColor; } else if (activeTool === 'eraser') { activeLayerCtx.globalCompositeOperation = 'destination-out'; } } maskCtx.globalCompositeOperation = 'source-over'; maskCtx.strokeStyle = 'rgba(255, 0, 255, 1)'; }
+            function addEventListeners() { canvas.addEventListener('mousedown', handleMouseDown); canvas.addEventListener('mousemove', draw); canvas.addEventListener('mouseup', handleMouseUp); canvas.addEventListener('mouseleave', handleMouseUp); maskCanvas.addEventListener('mousedown', handleMouseDown); maskCanvas.addEventListener('mousemove', draw); maskCanvas.addEventListener('mouseup', handleMouseUp); maskCanvas.addEventListener('mouseleave', handleMouseUp); colorPicker.addEventListener('input', (e) => { currentColor = e.target.value; updateBrush(); }); brushSizeSlider.addEventListener('input', (e) => { brushSize = e.target.value; brushSizeLabel.textContent = brushSize; updateBrush(); }); toolBtns.forEach(btn => { btn.addEventListener('click', () => { handleToolChange(btn.id.split('-')[1]); }); }); addLayerBtn.addEventListener('click', () => addNewLayer(true)); removeLayerBtn.addEventListener('click', removeActiveLayer); undoBtn.addEventListener('click', undoState); redoBtn.addEventListener('click', redoState); actionFlipBtn.addEventListener('click', () => showModal(flipModal)); document.getElementById('close-flip-modal-btn').addEventListener('click', () => hideModal(flipModal)); document.getElementById('flip-horizontal-btn').addEventListener('click', () => flipLayer('horizontal')); document.getElementById('flip-vertical-btn').addEventListener('click', () => flipLayer('vertical')); actionRotateBtn.addEventListener('click', () => showModal(rotateModal)); document.getElementById('close-rotate-modal-btn').addEventListener('click', () => hideModal(rotateModal)); document.getElementById('apply-rotate-btn').addEventListener('click', () => { const angle = parseFloat(document.getElementById('rotate-angle').value); if (!isNaN(angle)) rotateLayer(angle); }); actionExpandBtn.addEventListener('click', () => showModal(expandModal)); document.getElementById('close-expand-modal-btn').addEventListener('click', () => hideModal(expandModal)); document.getElementById('generate-expand-btn').addEventListener('click', expandCanvasWithAI); document.getElementById('apply-expand-btn').addEventListener('click', applyExpandedImage); aiTextureBtn.addEventListener('click', () => showModal(aiTextureModal)); closeAiTextureModalBtn.addEventListener('click', () => hideModal(aiTextureModal)); generateTextureBtn.addEventListener('click', generateTexture); addTextureToCanvasBtn.addEventListener('click', () => { if(generatedTextureBase64) addImageToCanvas(generatedTextureBase64, aiTextureModal); }); aiStoryBtn.addEventListener('click', () => { showModal(aiStoryModal); getStory(); }); closeAiStoryModalBtn.addEventListener('click', () => hideModal(aiStoryModal)); getStoryBtn.addEventListener('click', getStory); document.getElementById('tool-edit').addEventListener('click', () => { if (activeTool === 'edit') { const activeLayer = layers[activeLayerIndex]; if (activeLayer) { const compositeCanvas = document.createElement('canvas'); compositeCanvas.width = canvas.width; compositeCanvas.height = canvas.height; const compositeCtx = compositeCanvas.getContext('2d'); compositeCtx.drawImage(activeLayer.canvas, 0, 0); compositeCtx.globalAlpha = 0.5; compositeCtx.drawImage(maskCanvas, 0, 0); compositeCtx.globalAlpha = 1.0; editPreview.innerHTML = `<img src="${compositeCanvas.toDataURL()}" class="max-w-full max-h-full object-contain">`; } showModal(aiEditModal); }}); closeAiEditModalBtn.addEventListener('click', () => hideModal(aiEditModal)); generateEditBtn.addEventListener('click', generateInpainting); applyEditBtn.addEventListener('click', applyInpaintingToLayer); aiSketchBtn.addEventListener('click', () => { const activeLayer = layers[activeLayerIndex]; if (activeLayer) { const sketchDataURL = activeLayer.canvas.toDataURL('image/png'); sketchPreview.innerHTML = `<img src="${sketchDataURL}" class="max-w-full max-h-full object-contain">`; } showModal(aiSketchModal); }); closeAiSketchModalBtn.addEventListener('click', () => hideModal(aiSketchModal)); generateSketchBtn.addEventListener('click', generateSketchCompletion); addSketchResultBtn.addEventListener('click', addSketchResultToCanvas); aiFeedbackBtn.addEventListener('click', () => { showModal(aiFeedbackModal); getArtFeedback(); }); closeAiFeedbackModalBtn.addEventListener('click', () => hideModal(aiFeedbackModal)); getFeedbackBtn.addEventListener('click', getArtFeedback); aiMusicBtn.addEventListener('click', () => showModal(aiMusicModal)); closeAiMusicModalBtn.addEventListener('click', () => hideModal(aiMusicModal)); musicImageUpload.addEventListener('change', async (e) => { const file = e.target.files[0]; if (!file) return; musicImageBase64 = await fileToBase64(file); musicImagePreview.innerHTML = `<img src="${URL.createObjectURL(file)}" class="max-w-full max-h-full object-contain rounded-lg">`; generateMusicFromImage(); }); aiStyleBtn.addEventListener('click', () => showModal(aiStyleModal)); closeAiStyleModalBtn.addEventListener('click', () => hideModal(aiStyleModal)); styleImageUpload.addEventListener('change', async (e) => { const file = e.target.files[0]; if (!file) return; uploadedImageBase64 = await fileToBase64(file); styleImagePreview.innerHTML = `<img src="${URL.createObjectURL(file)}" class="max-w-full max-h-full object-contain rounded-lg">`; applyStyleBtn.disabled = false; }); applyStyleBtn.addEventListener('click', applyArtStyle); addStyledImageBtn.addEventListener('click', addStyledImageToNewLayer); aiPaletteBtn.addEventListener('click', () => showModal(aiPaletteModal)); closeAiPaletteModalBtn.addEventListener('click', () => hideModal(aiPaletteModal)); generatePaletteBtn.addEventListener('click', generateColorPalette); aiPalettePromptInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') generateColorPalette(); }); aiImageBtn.addEventListener('click', () => showModal(aiImageModal)); closeAiImageModalBtn.addEventListener('click', () => hideModal(aiImageModal)); generateImageBtn.addEventListener('click', generateImageFromPrompt); aiImagePromptInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') generateImageFromPrompt(); }); addImageToCanvasBtn.addEventListener('click', () => addImageToNewLayer(aiImageModal)); closeAlertBtn.addEventListener('click', () => hideModal(alertModal)); }
+        });
+    </script>
+</body>
 </html>
+
