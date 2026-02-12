@@ -1,20 +1,30 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+AI Origami Generator v1
 
-# Run and deploy your AI Studio app
+This is my first AI Origami Generator v1, created with HTML on 31 August 2025.
 
-This contains everything you need to run your app locally.
+How I Use AI Origami Generator v1
 
-View your app in AI Studio: https://ai.studio/apps/drive/1D4XVmKUffGK8zMrkCSS5FpKi-6H7UMKq
+Close my eyes and recall my past experience of being blind. If you don’t have such an experience, imagine what it feels like to be blind.
 
-## Run Locally
+Visualize an origami image in my mind and draft a prompt based on that mental image.
 
-**Prerequisites:**  Node.js
+Use shortcut keys to enter the prompt.
+
+Use shortcut keys to generate the origami image.
+
+Use AI Feedback, AI Music, or AI Story to evaluate the generated image. Draw inspiration from the text or music code to refine the prompt, then repeat Step 2.
+
+When satisfied with the evaluation, open my eyes and view the result.
+
+Future Improvements
+
+I hope to enhance this app so it can generate origami images in SVG format, allowing blind users to print their creations using a 3D printer.
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Here are the keyboard shortcuts now available in the editor:
+Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (Mac)
+Redo: Ctrl+Y (Windows/Linux) or Cmd+Shift+Z (Mac)
+Reset Image: Ctrl+R (Windows/Linux) or Cmd+R (Mac)
+Download Image: Ctrl+D (Windows/Linux) or Cmd+D (Mac)
+Exit Editor: Esc
+Switch Tabs: Alt+1, Alt+2, etc., to quickly jump between editing tabs like "Magic Edit" and "Filters".
